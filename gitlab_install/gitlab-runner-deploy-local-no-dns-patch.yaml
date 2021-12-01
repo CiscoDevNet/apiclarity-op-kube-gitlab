@@ -1,0 +1,176 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "2"
+    meta.helm.sh/release-name: gitlab
+    meta.helm.sh/release-namespace: default
+  labels:
+    app: gitlab-gitlab-runner
+    app.kubernetes.io/managed-by: Helm
+    chart: gitlab-runner-0.32.0
+    heritage: Helm
+    release: gitlab
+  name: gitlab-gitlab-runner
+  namespace: default
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: gitlab-gitlab-runner
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        checksum/configmap: f12e0eca971a3a181c5da602fff0b6ac7fc0dc0d66144ea0c2c2cdcc7eedd9ae
+        checksum/secrets: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+        gitlab.com/prometheus_port: "9252"
+        gitlab.com/prometheus_scrape: "true"
+        prometheus.io/port: "9252"
+        prometheus.io/scrape: "true"
+      labels:
+        app: gitlab-gitlab-runner
+        chart: gitlab-runner-0.32.0
+        heritage: Helm
+        release: gitlab
+    spec:
+      containers:
+      - command: ["bash", "-c", "cp /home/gitlab-runner/.gitlab-runner/certs/ca.crt /etc/gitlab-runner/certs/gitlab.gl.jockdarock.io.crt && /configmaps/entrypoint"]
+        env:
+        - name: CI_SERVER_URL
+          value: https://gitlab.gl.example.com
+        - name: CLONE_URL
+        - name: RUNNER_EXECUTOR
+          value: kubernetes
+        - name: REGISTER_LOCKED
+          value: "false"
+        - name: RUNNER_TAG_LIST
+        - name: KUBERNETES_PRIVILEGED
+          value: "true"
+        - name: KUBERNETES_NAMESPACE
+          value: default
+        image: gitlab/gitlab-runner:alpine-v14.2.0
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - /configmaps/check-live
+          failureThreshold: 3
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: gitlab-gitlab-runner
+        ports:
+        - containerPort: 9252
+          name: metrics
+          protocol: TCP
+        readinessProbe:
+          exec:
+            command:
+            - /usr/bin/pgrep
+            - gitlab.*runner
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: true
+          runAsUser: 0
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /secrets
+          name: runner-secrets
+        - mountPath: /home/gitlab-runner/.gitlab-runner
+          name: etc-gitlab-runner
+        - mountPath: /configmaps
+          name: configmaps
+        - mountPath: /home/gitlab-runner/.gitlab-runner/certs/
+          name: custom-certs
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      hostAliases:
+      - ip: "0.0.0.0" #CHANGE TO YOUR INGRESS IP ADDRESS
+        hostnames:
+        - "gitlab.gl.example.com" #CHANGE ME TO CORRECT
+      initContainers:
+      - command: ["/bin/sh", "/configmaps/configure"]
+        env:
+        - name: CI_SERVER_URL
+          value: https://gitlab.gl.example.com
+        - name: CLONE_URL
+        - name: RUNNER_EXECUTOR
+          value: kubernetes
+        - name: REGISTER_LOCKED
+          value: "false"
+        - name: RUNNER_TAG_LIST
+        - name: KUBERNETES_PRIVILEGED
+          value: "true"
+        - name: KUBERNETES_NAMESPACE
+          value: default
+        image: gitlab/gitlab-runner:alpine-v14.2.0
+        imagePullPolicy: IfNotPresent
+        name: configure
+        resources: {}
+        securityContext:
+          allowPrivilegeEscalation: true
+          runAsUser: 0
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /secrets
+          name: runner-secrets
+        - mountPath: /configmaps
+          name: configmaps
+          readOnly: true
+        - mountPath: /init-secrets
+          name: init-runner-secrets
+          readOnly: true
+        - mountPath: /home/gitlab-runner/.gitlab-runner/certs/
+          name: custom-certs
+          readOnly: true
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        runAsUser: 0
+      serviceAccount: gitlab-gitlab-runner
+      serviceAccountName: gitlab-gitlab-runner
+      terminationGracePeriodSeconds: 3600
+      volumes:
+      - emptyDir:
+          medium: Memory
+        name: runner-secrets
+      - emptyDir:
+          medium: Memory
+        name: etc-gitlab-runner
+      - name: init-runner-secrets
+        projected:
+          defaultMode: 420
+          sources:
+          - secret:
+              name: gitlab-minio-secret
+          - secret:
+              items:
+              - key: runner-registration-token
+                path: runner-registration-token
+              - key: runner-token
+                path: runner-token
+              name: gitlab-gitlab-runner-secret
+      - name: custom-certs
+        secret:
+          defaultMode: 0777
+          secretName: tls-secret-gl-gitlab
+      - configMap:
+          defaultMode: 0777
+          name: gitlab-gitlab-runner
+        name: configmaps
