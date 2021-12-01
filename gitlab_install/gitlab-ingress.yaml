@@ -1,0 +1,95 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    kubernetes.io/ingress.class: nginx
+  name: gitlab-webservice-default
+spec:
+  rules:
+  - host: <some-gitlab-host-domain> # example: gitlab.gl.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: gitlab-webservice-default
+          servicePort: 8181
+        path: /
+      - backend:
+          serviceName: gitlab-webservice-default
+          servicePort: 8080
+        path: /admin/sidekiq/
+  tls:
+  - hosts:
+    - <some-gitlab-host-domain> # example: gitlab.gl.example.com
+    secretName: tls-secret-gl-gitlab
+---
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    kubernetes.io/ingress.class: nginx
+  name: gitlab-minio
+  namespace: default
+spec:
+  rules:
+  - host: <some-minio-host-domain> # example: minio.gl.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: gitlab-minio-svc
+          servicePort: 9000
+        path: /
+  tls:
+  - hosts:
+    - <some-minio-host-domain> # example: minio.gl.example.com
+    secretName: gitlab-minio-tls
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    kubernetes.io/ingress.class: nginx
+  name: gitlab-registry
+  namespace: default
+spec:
+  rules:
+  - host: <some-registry-host-domain> # example: registry.gl.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: gitlab-registry
+          servicePort: 5000
+        path: /
+  tls:
+  - hosts:
+    - <some-registry-host-domain> # example: registry.gl.example.com
+    secretName: gitlab-registry-tls
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    kubernetes.io/ingress.class: nginx
+  name: gitlab-kas
+  namespace: default
+spec:
+  rules:
+  - host: <some-kas-host-domain> # example: kas.gl.example.com
+    http:
+      paths:
+      - backend:
+          serviceName: gitlab-kas
+          servicePort: 8150
+        path: /
+      - backend:
+          serviceName: gitlab-kas
+          servicePort: 8154
+        path: /k8s-proxy/
+  tls:
+  - hosts:
+    - <some-kas-host-domain> # example: kas.gl.example.com
+    secretName: gitlab-kas-tls

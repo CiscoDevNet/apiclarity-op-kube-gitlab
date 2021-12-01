@@ -1,0 +1,34 @@
+# This file is a template, and might need editing before it works on your project.
+# To contribute improvements to CI/CD templates, please follow the Development guide at:
+# https://docs.gitlab.com/ee/development/cicd/templates.html
+# This specific template is located at:
+# https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/ci/templates/Getting-Started.gitlab-ci.yml
+
+# This is a sample GitLab CI/CD configuration file that should run without any modifications.
+# It demonstrates a basic 3 stage CI/CD pipeline. Instead of real tests or scripts,
+# it uses echo commands to simulate the pipeline execution.
+#
+# A pipeline is composed of independent jobs that run scripts, grouped into stages.
+# Stages run in sequential order, but jobs within stages run in parallel.
+#
+# For more information, see: https://docs.gitlab.com/ee/ci/yaml/index.html#stages
+variables:
+  GIT_SSL_NO_VERIFY: 1
+
+stages:          # List of stages for jobs, and their order of execution
+  - deploy
+
+#deploy-job:      # This job runs in the deploy stage.
+  #stage: deploy  # It only runs when *both* jobs in the test stage complete successfully.
+  #script:
+    #- echo "Deploying application..."
+    #- echo "Application successfully deployed."
+deploy:
+  stage: deploy
+  image: jockdarock/kubectl-istioctl-helm:v0.0.0
+  script:
+    - kubectl config set-cluster k8s --server="${SERVER}" && kubectl config set clusters.k8s.certificate-authority-data ${CERTIFICATE_AUTHORITY_DATA} && kubectl config set-credentials gitlab --token="${USER_TOKEN}" && kubectl config set-context default --cluster=k8s --user=gitlab && kubectl config use-context default
+    - if ! istioctl verify-install; then echo "istio not installed"; istioctl install --set profile=default -y; else echo "Istio is installed, moving right along"; fi
+    - kubectl create ns sock-shop && kubectl label namespace sock-shop istio-injection=enabled --overwrite && kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.11/samples/addons/prometheus.yaml && kubectl apply -f deploy/kubernetes/complete-demo.yaml
+    - "while ! kubectl rollout -n sock-shop status deploy front-end; do sleep 5; echo \" Sock Shop not ready yet\"; done && echo \"demo app installed\" && git clone https://github.com/apiclarity/apiclarity && cd apiclarity && awk 'NR==25{print \"   type: NodePort\"}1' deployment/apiclarity.yaml && kubectl apply -f deployment/apiclarity.yaml && git submodule init wasm-filters && git submodule update wasm-filters && cd wasm-filters && ./deploy.sh sock-shop"
+    - while ! kubectl rollout -n apiclarity status deploy apiclarity; do sleep 5; done && echo "APIClarity is installed" && deploy=$(kubectl get -n sock-shop deploy -o name) && for i in $deploy; do kubectl rollout -n sock-shop status $i -w --timeout=60s; done && echo "Demo app is patched with APIClarity and ready to go" && echo "All Done"
